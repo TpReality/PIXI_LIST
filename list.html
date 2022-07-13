@@ -14,6 +14,20 @@ let Application = PIXI.Application,
     Sprite = PIXI.Sprite,
     Text = PIXI.Text,
     TextStyle = PIXI.TextStyle;
+//Create a Pixi Application
+let app = new Application({ 
+        width: 256, 
+        height: 256,                       
+        antialiasing: true, 
+        transparent: false, 
+        resolution: 1
+    }
+);
+
+document.body.appendChild(app.view);
+app.renderer.view.style.border = "1px dashed black";
+app.renderer.resize(512, 512);
+app.renderer.backgroundColor = 0xffffff;
 
 class ListScroll{
   constructor(wrap, list){
@@ -137,38 +151,26 @@ class ListScroll{
 }
 
 class MyList{
-    constructor(list){
-        
-        //Create a Pixi Application
-        let app = new Application({ 
-                width: 256, 
-                height: 256,                       
-                antialiasing: true, 
-                transparent: false, 
-                resolution: 1
-            }
-        );
-
-        document.body.appendChild(app.view);
-        app.renderer.view.style.border = "1px dashed black";
-        app.renderer.resize(512, 512);
-        app.renderer.backgroundColor = 0xffffff;
-
+    constructor(options){
+        this.options = options;
         this.listWrap = new Container();
         this.liArr = [];
         this.list = this.createList();
+        this.childList = undefined;
         
         this.listWrap.addChild(this.list)
         this.listWrap.mask = new Graphics()
         this.listWrap.mask.beginFill(0xffffff);
-        this.listWrap.mask.drawRect(0,0,100,256);
+        this.listWrap.mask.drawRect(options.x,options.y,100,256);
         this.listWrap.mask.endFill()
-        this.listWrap.hitArea = new PIXI.Rectangle(0, 0, 100, 256);
-
-        app.stage.addChild(this.listWrap)
-        
+        this.listWrap.hitArea = new PIXI.Rectangle(0,0, 100, 256);
         this.listWrap.interactive = true;
         this.listWrap.buttonMode = true;
+
+        this.listWrap.x = options.x
+        this.listWrap.y = options.y
+
+        app.stage.addChild(this.listWrap)
     }
 
     createList(){
@@ -207,17 +209,32 @@ class MyList{
         li.addChild(libg)
         li.addChild(text)
         
+        li.interactive = true;
         li.x = 0;
         li.y = 0;
+        if(this.options.hasChild){
+            li.on("mousedown", (e)=>{
+                this.createChild()
+            })
+        }
 
         return li
     }
+
+    createChild(){
+        this.childList = new MyList({
+            x:120, y:0, hasChild:false
+        });
+        new ListScroll(this.childList.listWrap, this.childList.list)
+    }
 }
 
-let myList = new MyList();
-console.log(myList)
+let myList = new MyList({
+    x:0, y:0, hasChild:true
+});
 
 new ListScroll(myList.listWrap, myList.list)
+
 
 </script>
 </body>
