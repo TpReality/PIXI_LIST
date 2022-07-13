@@ -1,0 +1,224 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Displaying the canvas</title>
+<body>
+<script src="pixi/pixi.min.js"></script>
+<!-- <script src="../pixi/hammer.js"></script> -->
+<!-- <script src="pixi/tink.js"></script> -->
+<script>
+
+let Application = PIXI.Application,
+    Container = PIXI.Container,
+    Graphics = PIXI.Graphics,
+    TextureCache = PIXI.utils.TextureCache,
+    Sprite = PIXI.Sprite,
+    Text = PIXI.Text,
+    TextStyle = PIXI.TextStyle;
+
+class ListScroll{
+  constructor(wrap, list){
+      this.list = list;
+      this.maxOffset = 50;//最大溢出值
+      this.cur = 0;//列表滑动位置
+      this.isDown = false;
+      this.vy = 0;//滑动的力度
+      this.fl = 150;//弹力,值越大,到度或到顶后,可以继续拉的越远
+      this.isInTransition = false;//是否在滚动中
+      this.timer = null;
+      this.offsetY= 0;
+      this.listY = list.y;
+      this.pointY = 0;
+      this.wrapHeight = wrap.mask.height;
+      this.scrollHeight = wrap.height;
+      this.startTime = 0
+
+      wrap.on('mousedown', (e)=>{
+          this.onStart(e)
+      })
+
+      wrap.on('mousemove', (e)=>{
+          this.onMove(e)
+        
+      })
+
+      wrap.on('mouseup', (e)=>{
+          this.onEnd(e)
+      })
+      wrap.on('mouseout', (e)=>{
+          this.onEnd(e)
+      })
+  }
+
+  onStart(e){
+    if (this.isInTransition)return;//如果在滚动中，则中止执行
+      clearTimeout(this.timer);//清除定时器
+      this.vy = 0;
+      this.offsetY = e.data.global.y - this.listY;//计算鼠标按下位置与列表当前位置的差值,列表位置初始值为0
+      this.pointY = e.data.global.y;//鼠标按下的位置
+      this.startTime = new Date().getTime();//鼠标按下时的时间戳
+      this.isDown = true;//鼠标是否有按下，主要防止用户是从容器外开始滑动的
+  }
+
+  onMove(e) {
+      if (!this.isDown) return;
+      let dateTime = new Date().getTime()
+      if (dateTime - this.startTime > 40) {//如果是慢速滑动，就不会产生力度，列表是跟着鼠标移动的
+              this.startTime = dateTime;//慢速滑动不产生力度，所以需要实时更新时间戳
+              this.listY = e.data.global.y - this.offsetY;//列表位置应为 鼠标当前位置减去鼠标按下时与列表位置的差值,如:列表初始位置为0,鼠标在 5的位置按,那么差值为 5,此处假如鼠标从5滑动到了4,向上滑,cur = 4-5 =-1  ,假如鼠标从5滑动到了6,向下滑,cur= 6 - 5 = 1
+
+
+              if (this.listY > 0) {//如果列表位置大于0,既鼠标向下滑动并到顶时
+                this.listY *= this.fl / (this.fl + this.listY);//列表位置带入弹力模拟,公式只能死记硬背了,公式为:位置 *=弹力/(弹力+位置)
+              }else if (this.listY < this.wrapHeight - this.scrollHeight) {//如果列表位置小于 容器高度减列表高度(因为需要负数,所以反过来减),既向上滑动到最底部时。
+                  //当列表滑动到最底部时,cur的值其实是等于 容器高度减列表高度的,假设窗口高度为10,列表为30,那此时cur为 10 - 30 = -20,但这里的判断是小于,所以当cur<-20时才会触发,如 -21;
+                  this.listY += this.scrollHeight - this.wrapHeight;//列表位置加等于 列表高度减容器高度(这是与上面不同,这里是正减,得到了一个正数) ,这里 cur 为负数,加上一个正数,延用上面的假设,此时 cur = -21 + (30-10=20) = -1 ,所以这里算的是溢出数
+
+//                        console.log(cur);
+                this.listY = this.listY * this.fl / (this.fl - this.listY) - this.scrollHeight + this.wrapHeight;//然后给溢出数带入弹力,延用上面的假设,这里为   cur = -1 * 150 /(150 - -1 = 151)~= -0.99 再减去 30  等于 -30.99  再加上容器高度 -30.99+10=-20.99  ,这也是公式,要死记。。
+              }
+              this.list.y = this.listY
+      }
+      this.vy = e.data.global.y - this.pointY;//记录本次移动后,与前一次鼠标位置的滑动的距离,快速滑动时才有效,慢速滑动时差值为 1 或 0,vy可以理解为滑动的力度
+
+//                console.log(vy);
+      this.pointY = e.data.global.y;//更新前一次位置为现在的位置,以备下一次比较
+  }
+
+  onEnd(e) {
+    if (this.isDown) {
+          this.isDown = false;
+          
+          var that = this,
+          friction = ((this.vy >> 31) * 2 + 1) * 0.5,//根据力度套用公式计算出惯性大小,公式要记住
+          oh = this.scrollHeight - this.wrapHeight;
+          this.timer = setInterval(function () {//
+              that.vy -= friction;//力度按 惯性的大小递减
+              that.listY += that.vy;//转换为额外的滑动距离
+              that.list.y = that.listY;//滑动列表
+
+              if (-that.listY - oh > that.maxOffset) {//如果列表底部超出了
+                  clearTimeout(that.timer);
+                  that.ease(-oh);//回弹
+                  return;
+              }
+              if (that.listY > that.maxOffset) {//如果列表顶部超出了
+                  clearTimeout(that.timer);
+                  that.ease(0);//回弹
+                  return;
+              }
+              if (Math.abs(that.vy) < 1) {//如果力度减小到小于1了,再做超出回弹
+                  clearTimeout(that.timer);
+                  if (that.listY > 0) {
+                      that.ease(0);
+                      return;
+                  }
+                  if (-that.listY > oh) {
+                      that.ease(-oh);
+                      return;
+                  }
+              }
+          }, 20);
+      }
+  }
+
+  ease(target) {
+      let that = this
+      this.isInTransition = true;
+      this.timer = setInterval(function () {//回弹算法为  当前位置 减 目标位置 取2个百分点 递减
+          that.listY -= (that.listY - target) * 0.2;
+          if (Math.abs(that.listY - target) < 1) {//减到 当前位置 与 目标位置相差小于1 之后直接归位
+            that.listY = target;
+              clearInterval(that.timer);
+              that.isInTransition = false;
+          }
+          that.list.y = that.listY;
+      }, 20);
+  }
+}
+
+class MyList{
+    constructor(list){
+        
+        //Create a Pixi Application
+        let app = new Application({ 
+                width: 256, 
+                height: 256,                       
+                antialiasing: true, 
+                transparent: false, 
+                resolution: 1
+            }
+        );
+
+        document.body.appendChild(app.view);
+        app.renderer.view.style.border = "1px dashed black";
+        app.renderer.resize(512, 512);
+        app.renderer.backgroundColor = 0xffffff;
+
+        this.listWrap = new Container();
+        this.liArr = [];
+        this.list = this.createList();
+        
+        this.listWrap.addChild(this.list)
+        this.listWrap.mask = new Graphics()
+        this.listWrap.mask.beginFill(0xffffff);
+        this.listWrap.mask.drawRect(0,0,100,256);
+        this.listWrap.mask.endFill()
+        this.listWrap.hitArea = new PIXI.Rectangle(0, 0, 100, 256);
+
+        app.stage.addChild(this.listWrap)
+        
+        this.listWrap.interactive = true;
+        this.listWrap.buttonMode = true;
+    }
+
+    createList(){
+        let list = new Container();
+        let that = this;
+
+        for(var i=0; i<15; i++){
+            let li = that.createLi(i);
+            li.x = 0;;
+            li.y = 60*i;
+            list.addChild(li);
+
+            that.liArr.push({
+                sx:li.x,
+                sy:li.y,
+                sli:li
+            })
+        }
+
+        return list
+    }
+
+    createLi(txt){
+        let li = new Container()
+        let libg = new Graphics()
+        let style = new TextStyle({
+            fontSize:40,
+            align: 'center',
+            fill:0x000000
+        })
+        let text = new Text(txt, style)
+
+        libg.beginFill(0xcccccc);
+        libg.drawRect(0, 0, 100, 50);
+        libg.endFill();
+        li.addChild(libg)
+        li.addChild(text)
+        
+        li.x = 0;
+        li.y = 0;
+
+        return li
+    }
+}
+
+let myList = new MyList();
+console.log(myList)
+
+new ListScroll(myList.listWrap, myList.list)
+
+</script>
+</body>
+
